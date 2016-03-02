@@ -1,0 +1,5 @@
+{{ $workers := whereLabelValueMatches $ "com.citusdata.role" `\AWorker\z` }}
+# this file was auto-generated using docker-gen
+{{ range $worker := $workers}}
+{{$worker.Name}} 5432
+{{ end }}
