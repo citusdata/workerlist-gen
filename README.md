@@ -54,4 +54,4 @@ Unless required by applicable law or agreed to in writing, software distributed 
 [image size]: https://imagelayers.io/?images=citusdata%2Fworkerlist-gen:latest
 [release]: https://github.com/citusdata/workerlist-gen/releases/latest
 [license]: LICENSE
-[docker-gen]: jwilder/docker-gen
+[docker-gen]: https://github.com/jwilder/docker-gen
