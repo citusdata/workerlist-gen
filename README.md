@@ -17,8 +17,9 @@ The worker list file will be written to `/etc/citus/pg_worker_list.conf` any tim
 Assuming your Docker daemon’s socket is located at `/var/run/docker.sock` (the default), you can start a `workerlist-gen` container like so:
 
 ```bash
-docker run -v /var/run/docker.sock:/tmp/docker.sock \
-  citusdata/workerlist-gen workerlist-gen
+docker run --name workerlist-gen           \
+  -v /var/run/docker.sock:/tmp/docker.sock \
+  citusdata/workerlist-gen
 ```
 
 `docker-gen` expects the Docker daemon’s socket to exist at `/tmp/docker.sock`, so the `-v` flag is needed to ensure it is mounted at that location, though the `DOCKER_HOST` environment variable can be used to override that expectation. The `docker-gen` [project page][docker-gen] providers further details.
@@ -35,10 +36,11 @@ docker run -v /var/run/docker.sock:/tmp/docker.sock \
 Let’s say a Citus container named `citus_master` is already running. The person who started it had the foresight to expose its configuration files as a `VOLUME` at `/etc/citusconf`. That location is non-standard, but nothing `workerlist-gen` can’t handle:
 
 ```bash
-docker run -v /var/run/docker.sock:/tmp/docker.sock \
-  --volumes-from citus_master                       \
-  -e CITUS_CONFDIR=/etc/citusconf                   \
-  citusdata/workerlist-gen workerlist-gen
+docker run --name workerlist-gen           \
+  -v /var/run/docker.sock:/tmp/docker.sock \
+  --volumes-from citus_master              \
+  -e CITUS_CONFDIR=/etc/citusconf          \
+  citusdata/workerlist-gen
 ```
 
 The `volumes-from` option ensures the `/etc/citusconf` path is shared between the `workerlist-gen` and `citus_master` container, so the configuration is available for reading by the master after `workerlist-gen` sends the `SIGHUP` signal.
