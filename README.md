@@ -10,7 +10,7 @@
 
 `workerlist-gen` wraps a single `docker-gen` process, which responds to Docker events by regenerating a worker list file. This file will contain the hostnames of all containers with a `com.citusdata.role` label value of `Worker`. All workers are assumed to be running a Citus instance on port `5432`.
 
-The worker list file will be written to `/etc/citus/pg_worker_list.conf` any time the set of worker nodes changes. After updating the file, `docker-gen` will send a `SIGHUP` signal to a container named `citus_master`, useful for prompting a Citus instance to reload its configuration files.
+The worker list file will be written to `/etc/citus/pg_worker_list.conf` any time the set of worker nodes changes. After updating the file, `docker-gen` will call `master_initialize_node_metadata` (using `psql`) against a container named `citus_master`, forcing the Citus instance to repopulate its worker list table. `psql` expects to connect over a socket.
 
 ## Usage
 
@@ -29,7 +29,6 @@ docker run --name workerlist-gen           \
 `workerlist-gen` honors a few environment variables in addition to those permitted by [`docker-gen`][docker-gen]…
 
   * `CITUS_CONFDIR` — Output directory for worker list file (default: `/etc/citus`)
-  * `CITUS_CONTAINER` — Container name (or identifier) to signal after configuration changes (default: `citus_master`)
 
 ### Real-World Example
 
