@@ -1,3 +1,7 @@
+### workerlist-gen v1.0.0 (November 9, 2016) ###
+
+* Based on `docker-gen` `v0.7.3`
+
 ### workerlist-gen v0.9.0 (March 2, 2016) ###
 
 * Initial release
