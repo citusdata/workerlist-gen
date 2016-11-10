@@ -1,8 +1,9 @@
 FROM jwilder/docker-gen:0.7.3
 MAINTAINER Citus Data https://citusdata.com
 
-ENV CITUS_CONFDIR=/etc/citus \
-    CITUS_CONTAINER=citus_master
+RUN apk add --no-cache postgresql-client
+
+ENV CITUS_CONFDIR=/etc/citus
 
 VOLUME $CITUS_CONFDIR
 
