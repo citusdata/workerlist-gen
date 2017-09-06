@@ -1,7 +1,7 @@
-FROM python:2.7-slim
+FROM python:2.7
 
 ADD manager.py /
 
-RUN pip install docker[tls] psycopg2
+RUN pip install docker psycopg2
 
-CMD [ "python", "./manager.py" ]
+CMD [ "python", "./manager.py"]
