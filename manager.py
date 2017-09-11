@@ -10,6 +10,7 @@ def get_env_vars(client):
     global postgres_db
 
     container = client.containers.get("citus_master")
+
     env_vars = container.exec_run(cmd='env')
 
     for each_line in env_vars.splitlines():
@@ -83,12 +84,21 @@ def check_cluster(client):
     conn = None
     worker_set = set()
     workers = set()
+    client_API = docker.APIClient(base_url=end_point)
+
     for container in containers:
-        if container.name == 'citus_master':
-            conn = connect_to_db(client)
-            workers = get_workers(conn)
-        elif 'citus_worker' in container.name:
-            worker_set.add(container.name)
+        c_name = container.name
+
+        status = client_API.inspect_container(c_name)
+
+        if 'Health' in status['State']:
+            health_status = status['State']['Health']['Status']
+            if health_status == 'healthy':
+                if c_name == 'citus_master':
+                    conn = connect_to_db(client)
+                    workers = get_workers(conn)
+                elif 'citus_worker' in c_name:
+                    worker_set.add(c_name)
 
     for each_worker in workers:
         (worker_name, port) = each_worker[0].split(',')
@@ -104,17 +114,18 @@ def check_cluster(client):
 
 
 def docker_checker():
+    global end_point
     end_point = "unix:///var/run/docker.sock"
     client = docker.DockerClient(base_url=end_point)
     worker_set = set()
-
+    conn = None
     (conn, worker_set) = check_cluster(client)
 
     for event in client.events():
         event_jsons = [json.loads(i) for i in event.split('\n') if i != '']
 
         for each_event in event_jsons:
-            if 'status' in each_event and each_event['status'] == "start":
+            if 'status' in each_event and each_event['status'] == "health_status: healthy":
                 service_name = each_event['Actor']['Attributes']['com.docker.compose.service']
                 name = each_event['Actor']['Attributes']['name']
 
