@@ -1,12 +1,7 @@
-FROM jwilder/docker-gen:0.7.3
-MAINTAINER Citus Data https://citusdata.com
+FROM python:3
 
-RUN apk add --no-cache postgresql-client
+ADD manager.py /
 
-ENV CITUS_CONFDIR=/etc/citus
+RUN pip install docker psycopg2
 
-VOLUME $CITUS_CONFDIR
-
-COPY workerlist-entrypoint.sh pg_worker_list.tmpl /
-
-ENTRYPOINT ["/workerlist-entrypoint.sh"]
+CMD [ "python", "./manager.py"]

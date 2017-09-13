@@ -1,3 +1,8 @@
+### workerlist-gen v3.0.0 (September 6, 2017) ###
+
+* Runs SQL queries to manage coordinator-worker relationship instead of
+using pg_worker_list.conf
+
 ### workerlist-gen v2.0.0 (November 9, 2016) ###
 
 * Compatible with Citus 6.0; breaks compatibility with prior versions
