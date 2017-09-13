@@ -1,9 +1,16 @@
+# ----------------------------------------------------------------------------------------
+#
+# manager.py
+#
+# Created to manage add/remove worker operations in Citus docker-compose.
+#
+# ----------------------------------------------------------------------------------------
 import docker
 import psycopg2
 import json
-import time
 
 
+# gets the environment variables from master to connect to database.
 def get_env_vars(client):
     global postgres_user
     global postgres_pass
@@ -11,9 +18,9 @@ def get_env_vars(client):
 
     container = client.containers.get("citus_master")
 
-    env_vars = container.exec_run(cmd='env')
+    env_vars = (container.exec_run(cmd='env')).decode('utf-8')
 
-    for each_line in env_vars.splitlines():
+    for each_line in env_vars.split('\n'):
         if 'POSTGRES' in each_line:
             (key, val) = each_line.split("=")
             if key == "POSTGRES_USER":
@@ -24,39 +31,17 @@ def get_env_vars(client):
                 postgres_db = val
 
 
-def connect_to_db(client):
-    conn = None
-    a = 0
-
-    get_env_vars(client)
-
-    while a < 10 and conn is None:
-        time.sleep(2)
-        try:
-            conn = psycopg2.connect("dbname=%s user=%s host=%s password=%s" %
-                                    (postgres_db, postgres_user, "citus_master", postgres_pass))
-        except:
-            print("I am unable to connect")
-            a = a + 1
-
-    return conn
-
-
-def add_workers(conn, workers):
-    for worker in workers:
-        add_worker(conn, worker, 5432)
-    conn.commit()
-
-
+# adds the worker container's host and port information to master
 def add_worker(conn, host, port):
     cur = conn.cursor()
     worker_dict = ({"host": host, "port": port})
+
     try:
         cur.execute("""SELECT master_add_node(%(host)s, %(port)s)""", worker_dict)
     except:
         print("I can't add worker to the coordinator!")
 
-
+# removes the worker container's host and port information from master
 def remove_worker(conn, host, port):
     cur = conn.cursor()
     worker_dict = ({"host": host, "port": port})
@@ -66,86 +51,80 @@ def remove_worker(conn, host, port):
         print("I can't remove worker from the coordinator!")
 
 
-def get_workers(conn):
-    cur = conn.cursor()
-    workers = None
-
-    try:
-        cur.execute("""SELECT master_get_active_worker_nodes()""")
-        workers = cur.fetchall()
-    except:
-        print("I can't fetch active workers!")
-
-    return workers
-
-
-def check_cluster(client):
+# connect_to_master method is used to connect to master coordinator at the start-up.
+# Citus docker-compose has a dependency mapping as worker -> manager -> master.
+# This means that whenever manager is created, master is already there. If it is healthy,
+# we can connect to it. If not, just returns None.
+def connect_to_master(client):
     containers = client.containers.list()
     conn = None
-    worker_set = set()
-    workers = set()
+
+    # inspect_container method is only provided for APIClient
     client_API = docker.APIClient(base_url=end_point)
 
+    # for each current containers, checks if they are master and healthy
     for container in containers:
         c_name = container.name
-
+        service_label = container.labels['com.docker.compose.service']
         status = client_API.inspect_container(c_name)
+        if 'Health' in status['State'] and service_label == 'master':
 
-        if 'Health' in status['State']:
             health_status = status['State']['Health']['Status']
             if health_status == 'healthy':
-                if c_name == 'citus_master':
-                    conn = connect_to_db(client)
-                    workers = get_workers(conn)
-                elif 'citus_worker' in c_name:
-                    worker_set.add(c_name)
 
-    for each_worker in workers:
-        (worker_name, port) = each_worker[0].split(',')
-        if worker_name[1:] not in worker_set:
-            remove_worker(conn, worker_name[1:], port[:len(port) - 1])
+                # fetches the necessary variables to be able to connect to the database
+                get_env_vars(client)
 
-    if conn is not None:
-        add_workers(conn, worker_set)
+                # the container is both master and healthy, so just connect to it
+                try:
+                    conn = psycopg2.connect("dbname=%s user=%s host=%s password=%s" %
+                                            (postgres_db, postgres_user, c_name, postgres_pass))
+                except:
+                    print("I am unable to connect to the master")
 
-    print(worker_set)
-
-    return conn, worker_set
+    return conn
 
 
 def docker_checker():
     global end_point
     end_point = "unix:///var/run/docker.sock"
     client = docker.DockerClient(base_url=end_point)
-    worker_set = set()
-    conn = None
-    (conn, worker_set) = check_cluster(client)
 
+    # creates the necessary connection to make the sql calls if the master is ready
+    conn = connect_to_master(client)
+
+    # client.events() is a generator.
+    # This is an infinite loop listening to the docker events.
     for event in client.events():
-        event_jsons = [json.loads(i) for i in event.split('\n') if i != '']
+
+        # Sometimes, multiple events might come wrapped in the same event
+        event_jsons = [json.loads(i) for i in event.splitlines() if i != '']
 
         for each_event in event_jsons:
+
             if 'status' in each_event and each_event['status'] == "health_status: healthy":
                 service_name = each_event['Actor']['Attributes']['com.docker.compose.service']
                 name = each_event['Actor']['Attributes']['name']
 
                 if service_name == "master" and conn is None:
-                    conn = connect_to_db(client)
-                    add_workers(conn, worker_set)
+                    get_env_vars(client)
+
+                    try:
+                        conn = psycopg2.connect("dbname=%s user=%s host=%s password=%s" %
+                                                (postgres_db, postgres_user, name, postgres_pass))
+                    except:
+                        print("I am unable to connect")
 
                 if service_name == "worker" and conn is not None:
                     add_worker(conn, name, 5432)
                     conn.commit()
 
-                if service_name == "worker" and conn is None:
-                    worker_set.add(name)
             elif 'status' in each_event and each_event['status'] == "die":
                 service_name = each_event['Actor']['Attributes']['com.docker.compose.service']
                 name = each_event['Actor']['Attributes']['name']
 
                 if service_name == "master":
                     conn = None
-                    worker_set = set()
 
                 if service_name == "worker" and conn is not None:
                     remove_worker(conn, name, 5432)
